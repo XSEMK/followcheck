@@ -12,6 +12,10 @@ import {
 
 export const runtime = "nodejs";
 
+const MAX_FILE_SIZE = 4 * 1024 * 1024;
+const MAX_ZIP_FILES = 100;
+const MAX_HTML_SIZE = 10 * 1024 * 1024;
+
 async function readText(
   zip: JSZip,
   filename: string
@@ -24,12 +28,41 @@ async function readText(
     );
   }
 
-  return await file.async("text");
+  const text = await file.async("text");
+
+  if (text.length > MAX_HTML_SIZE) {
+    throw new Error(
+      `Fișierul ${filename} este prea mare pentru a fi procesat.`
+    );
+  }
+
+  return text;
 }
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
+    const contentLength =
+      request.headers.get("content-length");
+
+    if (contentLength) {
+      const size = Number(contentLength);
+
+      if (
+        Number.isFinite(size) &&
+        size > MAX_FILE_SIZE
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Arhiva este prea mare. Limita pentru această versiune este de 4 MB.",
+          },
+          { status: 413 }
+        );
+      }
+    }
+
+    const formData =
+      await request.formData();
 
     const file = formData.get("file");
 
@@ -40,6 +73,18 @@ export async function POST(request: Request) {
             "Nu a fost încărcat niciun fișier.",
         },
         { status: 400 }
+      );
+    }
+
+    if (
+      file.size > MAX_FILE_SIZE
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Arhiva este prea mare. Limita pentru această versiune este de 4 MB.",
+        },
+        { status: 413 }
       );
     }
 
@@ -57,23 +102,50 @@ export async function POST(request: Request) {
       );
     }
 
-    const buffer = await file.arrayBuffer();
+    const buffer =
+      await file.arrayBuffer();
 
-    const zip = await JSZip.loadAsync(buffer);
+    const zip =
+      await JSZip.loadAsync(buffer);
 
-    const files = Object.keys(zip.files).filter(
-      (name) => !zip.files[name].dir
-    );
-
-    const followersFile = files.find(
+    const files = Object.keys(
+      zip.files
+    ).filter(
       (name) =>
-        name.toLowerCase().endsWith("followers_1.html")
+        !zip.files[name].dir
     );
 
-    const followingFile = files.find(
-      (name) =>
-        name.toLowerCase().endsWith("following.html")
-    );
+    if (
+      files.length > MAX_ZIP_FILES
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Arhiva conține prea multe fișiere și nu poate fi procesată.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const followersFile =
+      files.find(
+        (name) =>
+          name
+            .toLowerCase()
+            .endsWith(
+              "followers_1.html"
+            )
+      );
+
+    const followingFile =
+      files.find(
+        (name) =>
+          name
+            .toLowerCase()
+            .endsWith(
+              "following.html"
+            )
+      );
 
     if (!followersFile) {
       return NextResponse.json(
@@ -117,35 +189,9 @@ export async function POST(request: Request) {
         followingHtml
       );
 
-    console.log(
-      "================================"
-    );
-
-    console.log(
-      "FOLLOWERS FILE:",
-      followersFile
-    );
-
-    console.log(
-      "FOLLOWING FILE:",
-      followingFile
-    );
-
-    console.log(
-      "TOTAL FOLLOWERS:",
-      followers.length
-    );
-
-    console.log(
-      "TOTAL FOLLOWING:",
-      following.length
-    );
-
-    console.log(
-      "================================"
-    );
-
-    if (followers.length === 0) {
+    if (
+      followers.length === 0
+    ) {
       return NextResponse.json(
         {
           error:
@@ -155,7 +201,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (following.length === 0) {
+    if (
+      following.length === 0
+    ) {
       return NextResponse.json(
         {
           error:
@@ -177,16 +225,6 @@ export async function POST(request: Request) {
         followers
       );
 
-    console.log(
-      "NU TE URMĂRESC ÎNAPOI:",
-      notFollowingBack.length
-    );
-
-    console.log(
-      "NU ÎI URMĂREȘTI:",
-      notFollowedByYou.length
-    );
-
     return NextResponse.json({
       followersCount:
         followers.length,
@@ -200,16 +238,16 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error(
-      "Instagram analysis error:",
-      error
+      "Instagram analysis failed:",
+      error instanceof Error
+        ? error.message
+        : "Unknown error"
     );
 
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : "Exportul nu a putut fi procesat.",
+          "Exportul Instagram nu a putut fi procesat. Verifică arhiva și încearcă din nou.",
       },
       { status: 500 }
     );
