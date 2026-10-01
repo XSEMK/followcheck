@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 type AnalysisResult = {
   followersCount: number;
   followingCount: number;
+  pendingCount: number;
+  pending: string[];
   notFollowingBack: string[];
   notFollowedByYou: string[];
 };
@@ -13,7 +15,8 @@ type SortOrder = "asc" | "desc";
 
 type FilterType =
   | "notFollowingBack"
-  | "notFollowedByYou";
+  | "notFollowedByYou"
+  | "pending";
 
 export default function Home() {
   const [file, setFile] =
@@ -105,10 +108,17 @@ export default function Home() {
       return [];
     }
 
-    return filter ===
-      "notFollowedByYou"
-      ? result.notFollowedByYou
-      : result.notFollowingBack;
+    if (filter === "pending") {
+      return result.pending;
+    }
+
+    if (
+      filter === "notFollowedByYou"
+    ) {
+      return result.notFollowedByYou;
+    }
+
+    return result.notFollowingBack;
   }, [result, filter]);
 
   const filteredUsers = useMemo(() => {
@@ -145,8 +155,7 @@ export default function Home() {
   const followingBackCount =
     result
       ? result.followingCount -
-        result.notFollowingBack
-          .length
+        result.notFollowingBack.length
       : 0;
 
   const followingBackPercentage =
@@ -171,6 +180,13 @@ export default function Home() {
   function getExportUsers() {
     if (!result) {
       return [];
+    }
+
+    if (filter === "pending") {
+      return [...result.pending].sort(
+        (a, b) =>
+          a.localeCompare(b)
+      );
     }
 
     return [
@@ -222,11 +238,21 @@ export default function Home() {
       return;
     }
 
-    const title =
+    let title =
+      "Conturi care nu te urmăresc înapoi";
+
+    if (
       filter ===
       "notFollowedByYou"
-        ? "Conturi care te urmăresc, dar tu nu îi urmărești"
-        : "Conturi care nu te urmăresc înapoi";
+    ) {
+      title =
+        "Conturi care te urmăresc, dar tu nu îi urmărești";
+    }
+
+    if (filter === "pending") {
+      title =
+        "Cereri de follow în așteptare";
+    }
 
     const text = [
       "FOLLOWCHECK",
@@ -256,11 +282,21 @@ export default function Home() {
       return;
     }
 
-    const category =
+    let category =
+      "Nu te urmărește înapoi";
+
+    if (
       filter ===
       "notFollowedByYou"
-        ? "Te urmărește, dar tu nu îl urmărești"
-        : "Nu te urmărește înapoi";
+    ) {
+      category =
+        "Te urmărește, dar tu nu îl urmărești";
+    }
+
+    if (filter === "pending") {
+      category =
+        "Cerere de follow în așteptare";
+    }
 
     const rows = [
       [
@@ -317,6 +353,12 @@ export default function Home() {
         a.localeCompare(b)
       );
 
+    const pending =
+      [...result.pending].sort(
+        (a, b) =>
+          a.localeCompare(b)
+      );
+
     const report = [
       "========================================",
       "              FOLLOWCHECK",
@@ -330,6 +372,7 @@ export default function Home() {
       `Te urmăresc înapoi: ${followingBackCount}`,
       `Procent follow-back: ${followingBackPercentage}%`,
       `Nu te urmăresc înapoi: ${notFollowingBack.length}`,
+      `Cereri de follow în așteptare: ${pending.length}`,
       "",
       "========================================",
       "       NU TE URMĂRESC ÎNAPOI",
@@ -345,6 +388,15 @@ export default function Home() {
       "========================================",
       "",
       ...notFollowedByYou.map(
+        (username, index) =>
+          `${index + 1}. @${username}`
+      ),
+      "",
+      "========================================",
+      "       CERERI ÎN AȘTEPTARE",
+      "========================================",
+      "",
+      ...pending.map(
         (username, index) =>
           `${index + 1}. @${username}`
       ),
@@ -400,17 +452,29 @@ export default function Home() {
     setSortOrder("asc");
   }
 
-  const listTitle =
-    filter ===
-    "notFollowedByYou"
-      ? "Te urmăresc, dar tu nu îi urmărești"
-      : "Nu te urmăresc înapoi";
+  let listTitle =
+    "Nu te urmăresc înapoi";
 
-  const listDescription =
-    filter ===
-    "notFollowedByYou"
-      ? "Conturi care te urmăresc fără să le urmărești."
-      : "Conturi pe care le urmărești, dar care nu te urmăresc.";
+  let listDescription =
+    "Conturi pe care le urmărești, dar care nu te urmăresc.";
+
+  if (
+    filter === "notFollowedByYou"
+  ) {
+    listTitle =
+      "Te urmăresc, dar tu nu îi urmărești";
+
+    listDescription =
+      "Conturi care te urmăresc fără să le urmărești.";
+  }
+
+  if (filter === "pending") {
+    listTitle =
+      "Cereri de follow în așteptare";
+
+    listDescription =
+      "Conturi pentru care ai o cerere de follow în așteptare.";
+  }
 
   const colors = darkMode
     ? {
@@ -745,7 +809,7 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="grid gap-3 sm:gap-4 md:grid-cols-3">
+            <div className="grid gap-3 sm:gap-4 md:grid-cols-4">
               {[
                 {
                   label: "Followers",
@@ -775,16 +839,28 @@ export default function Home() {
                   icon: "💔",
                   accent: "pink",
                 },
+                {
+                  label: "Pending",
+                  value:
+                    result.pendingCount,
+                  description:
+                    "cereri în așteptare",
+                  icon: "⏳",
+                  accent: "amber",
+                },
               ].map((card) => (
                 <div
                   key={card.label}
                   className={`group rounded-3xl border p-5 transition duration-300 hover:-translate-y-1 sm:p-6 ${
                     card.accent === "pink"
                       ? "border-pink-500/20 bg-gradient-to-br from-pink-500/10 to-purple-500/10 hover:border-pink-500/40"
+                      : card.accent === "amber"
+                      ? "border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-orange-500/10 hover:border-amber-500/40"
                       : ""
                   }`}
                   style={
-                    card.accent !== "pink"
+                    card.accent !== "pink" &&
+                    card.accent !== "amber"
                       ? {
                           backgroundColor:
                             colors.card,
@@ -1102,7 +1178,7 @@ export default function Home() {
                   colors.border,
               }}
             >
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={() =>
@@ -1181,6 +1257,42 @@ export default function Home() {
                           .notFollowedByYou
                           .length
                       }
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    selectFilter(
+                      "pending"
+                    )
+                  }
+                  className={`rounded-2xl p-4 text-left transition duration-300 ${
+                    filter === "pending"
+                      ? "bg-amber-500/10 ring-1 ring-amber-500/30"
+                      : "hover:bg-black/5 dark:hover:bg-white/[0.03]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold">
+                        ⏳ Pending
+                      </p>
+
+                      <p
+                        className="mt-1 text-xs"
+                        style={{
+                          color:
+                            colors.subtle,
+                        }}
+                      >
+                        Cereri de follow în așteptare
+                      </p>
+                    </div>
+
+                    <span className="rounded-xl bg-amber-500/10 px-3 py-1.5 text-sm font-black text-amber-400">
+                      {result.pendingCount}
                     </span>
                   </div>
                 </button>
@@ -1387,6 +1499,9 @@ export default function Home() {
                               filter ===
                               "notFollowedByYou"
                                 ? "bg-emerald-500/10 text-emerald-400"
+                                : filter ===
+                                  "pending"
+                                ? "bg-amber-500/10 text-amber-400"
                                 : "bg-pink-500/10 text-pink-400"
                             }`}
                           >
@@ -1408,6 +1523,9 @@ export default function Home() {
                               {filter ===
                               "notFollowedByYou"
                                 ? "Te urmărește"
+                                : filter ===
+                                  "pending"
+                                ? "Cerere în așteptare"
                                 : "Nu te urmărește"}
                             </p>
                           </div>

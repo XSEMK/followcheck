@@ -3,6 +3,7 @@ import JSZip from "jszip";
 
 import {
   extractUsernamesFromHtml,
+  extractPendingUsernamesFromHtml,
 } from "@/lib/instagram-parser";
 
 import {
@@ -147,6 +148,16 @@ export async function POST(request: Request) {
             )
       );
 
+    const pendingFile =
+      files.find(
+        (name) =>
+          name
+            .toLowerCase()
+            .endsWith(
+              "pending_follow_requests.html"
+            )
+      );
+
     if (!followersFile) {
       return NextResponse.json(
         {
@@ -188,6 +199,21 @@ export async function POST(request: Request) {
       extractUsernamesFromHtml(
         followingHtml
       );
+
+    let pending: string[] = [];
+
+    if (pendingFile) {
+      const pendingHtml =
+        await readText(
+          zip,
+          pendingFile
+        );
+
+      pending =
+        extractPendingUsernamesFromHtml(
+          pendingHtml
+        );
+    }
 
     if (
       followers.length === 0
@@ -231,6 +257,11 @@ export async function POST(request: Request) {
 
       followingCount:
         following.length,
+
+      pendingCount:
+        pending.length,
+
+      pending,
 
       notFollowingBack,
 

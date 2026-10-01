@@ -1,6 +1,7 @@
 export type InstagramData = {
   followers: string[];
   following: string[];
+  pending: string[];
 };
 
 function cleanUsername(
@@ -35,27 +36,6 @@ function isValidUsername(
   return true;
 }
 
-/*
- * FOLLOWING
- *
- * Instagram folosește:
- *
- * {
- *   "relationships_following": [
- *     {
- *       "title": "username",
- *       "string_list_data": [
- *         {
- *           "href": "...",
- *           "timestamp": ...
- *         }
- *       ]
- *     }
- *   ]
- * }
- *
- * Username-ul este în "title".
- */
 export function extractFollowingUsernames(
   data: unknown
 ): string[] {
@@ -110,28 +90,6 @@ export function extractFollowingUsernames(
   ];
 }
 
-/*
- * FOLLOWERS
- *
- * Followers pot apărea ca array:
- *
- * [
- *   {
- *     "title": "username",
- *     "string_list_data": [
- *       {
- *         "value": "username",
- *         ...
- *       }
- *     ]
- *   }
- * ]
- *
- * sau într-un obiect.
- *
- * Pentru followers folosim "value" când există.
- * Dacă nu există, folosim "title".
- */
 export function extractFollowerUsernames(
   data: unknown
 ): string[] {
@@ -160,9 +118,6 @@ export function extractFollowerUsernames(
     const object =
       value as Record<string, unknown>;
 
-    /*
-     * Prioritate pentru string_list_data[].value
-     */
     if (
       Array.isArray(
         object.string_list_data
@@ -196,9 +151,6 @@ export function extractFollowerUsernames(
       }
     }
 
-    /*
-     * Dacă nu există value, folosim title.
-     */
     if (
       typeof object.title === "string"
     ) {
@@ -269,6 +221,96 @@ export function extractUsernamesFromHtml(
   ];
 }
 
+export function extractPendingUsernamesFromHtml(
+  html: string
+): string[] {
+  const result: string[] = [];
+
+  const cellRegex =
+    /<td[^>]*>([\s\S]*?)<\/td>/gi;
+
+  const cells: string[] = [];
+
+  let cellMatch: RegExpExecArray | null;
+
+  while (
+    (cellMatch =
+      cellRegex.exec(html)) !== null
+  ) {
+    const rawCell =
+      cellMatch[1];
+
+    const text =
+      rawCell
+        .replace(/<[^>]+>/g, " ")
+        .replace(
+          /&nbsp;/gi,
+          " "
+        )
+        .replace(
+          /&amp;/gi,
+          "&"
+        )
+        .replace(
+          /&lt;/gi,
+          "<"
+        )
+        .replace(
+          /&gt;/gi,
+          ">"
+        )
+        .replace(
+          /&#39;/gi,
+          "'"
+        )
+        .replace(
+          /&quot;/gi,
+          '"'
+        )
+        .replace(
+          /\s+/g,
+          " "
+        )
+        .trim();
+
+    if (text) {
+      cells.push(text);
+    }
+  }
+
+  for (
+    let index = 0;
+    index < cells.length - 1;
+    index += 1
+  ) {
+    const current =
+      cells[index]
+        .trim()
+        .toLowerCase();
+
+    if (
+      current !== "nume de utilizator"
+    ) {
+      continue;
+    }
+
+    const username =
+      cleanUsername(
+        cells[index + 1]
+      );
+
+    if (
+      isValidUsername(username)
+    ) {
+      result.push(username);
+    }
+  }
+
+  return [
+    ...new Set(result),
+  ];
+}
+
 export function parseInstagramData(
   followersData: unknown,
   followingData: unknown
@@ -283,5 +325,7 @@ export function parseInstagramData(
       extractFollowingUsernames(
         followingData
       ),
+
+    pending: [],
   };
 }
